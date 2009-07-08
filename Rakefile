@@ -23,6 +23,8 @@ bin = 'bin'
 libs = 'libs'
 assets = 'assets'
 classes = "#{bin}/classes"
+classes_jar = "/System/Library/Frameworks/JavaVM.framework/Versions/1.5.0/Classes/classes.jar"
+scala_jars = %w(/opt/local/share/scala/lib/scala-compiler.jar /opt/local/share/scala/lib/scala-library.jar)
 ap_ = "#{bin}/#{project}.ap_"
 apk = "#{bin}/#{project}.apk"
 
@@ -36,8 +38,8 @@ directory classes
 dirs = [gen, bin, classes]
 
 CLEAN.include(gen, bin)
-CLASSPATH = FileList["#{libs}/**/*.jar"]
-BOOTCLASSPATH = FileList[android_jar]
+CLASSPATH = FileList["#{libs}/**/*.jar"] + scala_jars
+BOOTCLASSPATH = FileList[android_jar, classes_jar]
 
 # Extensions for standard rake classes.
 module Rake
@@ -48,13 +50,23 @@ module Rake
   end
 end
 
-def compile(dest, *srcdirs)
+def compile_java(dest, *srcdirs)
   files = FileList.new
   srcdirs.each do |d|
     files.include("#{d}/**/*.java")
   end
 
   sh "javac", "-target", "1.5", "-g", "-bootclasspath", BOOTCLASSPATH.to_cp,  "-nowarn", "-Xlint:none", 
+     "-sourcepath", srcdirs.join(File::PATH_SEPARATOR), "-d", dest ,"-classpath", CLASSPATH.to_cp, *files
+end
+
+def compile_scala(dest, *srcdirs)
+  files = FileList.new
+  srcdirs.each do |d|
+    files.include("#{d}/**/*.scala")
+  end
+
+  sh "scalac", "-g", "-bootclasspath", BOOTCLASSPATH.to_cp,  "-nowarn",
      "-sourcepath", srcdirs.join(File::PATH_SEPARATOR), "-d", dest ,"-classpath", CLASSPATH.to_cp, *files
 end
 
@@ -72,11 +84,23 @@ task :aidl => dirs do
 end
 
 task :compile => [:resource_src, :aidl] do
-  compile(classes, src, gen)
+  compile_java(classes, gen)
+  compile_scala(classes, src, gen)
 end
 
-task :dex => :compile do
-  sh "dx", *["--dex", "--output=#{intermediate_dex_location}", classes ] + CLASSPATH
+task :shake => [ :compile ] do
+  sh "java", "-Xmx512M", "-jar", "proguard/proguard.jar",
+    "-injars", "#{classes}:#{scala_jars.last}(!META-INF/MANIFEST.MF,!library.properties)",
+    "-outjars", "#{bin}/out.min.jar",
+    "-libraryjars", android_jar,
+    "-dontwarn",
+    "-dontoptimize",
+    "-dontobfuscate",
+    "-keep",  "public class * extends android.app.Activity"
+end
+
+task :dex => :shake do
+  sh "dx", *["-JXmx512M",  "--dex", "--output=#{intermediate_dex_location}", "#{bin}/out.min.jar"]
 end
 
 task :package_resources do
