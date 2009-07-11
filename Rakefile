@@ -3,6 +3,9 @@ require 'rake'
 require 'rexml/document'
 require 'rake/clean'
 
+fail "need SCALA_HOME set" unless ENV['SCALA_HOME']
+fail "need ANDROID_SDK set" unless ENV['ANDROID_SDK']
+
 def manifest
   @parsed ||= begin
     doc = REXML::Document.new(File.read('AndroidManifest.xml'))
@@ -15,7 +18,7 @@ end
 app_pkg = manifest[:package]
 project = app_pkg.gsub(/\./, '_')
 
-sdk_location = ENV['ANDROID_SDK'] || '/Users/jan/projects/android-sdk-mac_x86-1.5_r1'
+sdk_location = ENV['ANDROID_SDK']
 src = 'src'
 gen = 'gen'
 res = 'res'
@@ -24,7 +27,8 @@ libs = 'libs'
 assets = 'assets'
 classes = "#{bin}/classes"
 classes_jar = "/System/Library/Frameworks/JavaVM.framework/Versions/1.5.0/Classes/classes.jar"
-scala_jars = %w(/opt/local/share/scala/lib/scala-compiler.jar /opt/local/share/scala/lib/scala-library.jar)
+scala_jars  = %w(scala-compiler.jar scala-library.jar).map { |l| File.join(ENV['SCALA_HOME'], 'lib', l) }
+
 ap_ = "#{bin}/#{project}.ap_"
 apk = "#{bin}/#{project}.apk"
 
